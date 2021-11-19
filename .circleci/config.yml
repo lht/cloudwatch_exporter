@@ -20,6 +20,7 @@ jobs:
     environment:
       DOCKER_BUILDKIT: 1
       BUILDX_PLATFORMS: linux/amd64,linux/arm64
+      IMAGE_PREFIX: ghcr.io/lht
     steps:
       - checkout
       - setup_remote_docker:
@@ -41,17 +42,19 @@ jobs:
             docker buildx install
             # Run binfmt
             docker run --rm --privileged tonistiigi/binfmt:latest --install "$BUILDX_PLATFORMS"
-      - run: docker login -u $QUAY_LOGIN -p $QUAY_PASSWORD quay.io
+      - run: echo "$GHCR_TOKEN" | docker login https://ghcr.io -u lht --password-stdin
       - run: |
+          docker context create ctx
+          docker buildx create ctx --name builder --use
           if [[ -n "$CIRCLE_TAG" ]]; then
             docker buildx build \
               --platform "$BUILDX_PLATFORMS" \
-              -t quay.io/prometheus/cloudwatch-exporter:"${CIRCLE_TAG}" \
-              -t quay.io/prometheus/cloudwatch-exporter:latest --push .
+              -t $IMAGE_PREFIX/cloudwatch-exporter:"${CIRCLE_TAG}" \
+              -t $IMAGE_PREFIX/cloudwatch-exporter:latest --push .
           else
             docker buildx build \
               --platform "$BUILDX_PLATFORMS" \
-              -t quay.io/prometheus/cloudwatch-exporter:latest --push .
+              -t $IMAGE_PREFIX/cloudwatch-exporter:latest --push .
           fi
       - run: docker images
 workflows:
@@ -63,13 +66,11 @@ workflows:
             tags:
               only: /.*/
       - publish_image_to_quay:
-          context: org-context
+#         context: org-context
           requires:
             - build
           filters:
             branches:
-              only: master
+              only: test
             tags:
               only: /.*/
-orbs:
-  prometheus: prometheus/prometheus@0.14.0
